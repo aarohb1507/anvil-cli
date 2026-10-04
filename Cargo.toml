@@ -2,5 +2,10 @@
 name = "ingestrs"
 version = "0.1.0"
 edition = "2021"
+autobins = false
 
 [dependencies]
+
+[[bin]]
+name = "anvil"
+path = "src/main.rs"
