@@ -60,6 +60,18 @@ With `--nocapture`, the test prints two lightweight timing metrics:
 I/O, making them useful as a small regression signal rather than a synthetic
 microbenchmark.
 
+For end-to-end throughput, run the ignored load test:
+
+```sh
+cargo test --test durable_runner_load -- --ignored --nocapture
+```
+
+It runs 100 unique steps followed by 1,000 requests for an already-completed
+step. The output reports `cold_steps_per_second` and
+`cached_steps_per_second`; both include process startup and diary I/O. Scale
+the run when needed with `ANVIL_LOAD_STEPS=500` and
+`ANVIL_CACHE_HITS=5000`.
+
 ## Current Storage Format
 
 The diary is a tab-separated append-only file. That keeps the first useful
