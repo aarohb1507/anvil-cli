@@ -8,6 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_DIARY: &str = ".anvil/diary.tsv";
 
+// The diary stores only completed work in memory. The raw file can contain
+// started/failed history too, but cache lookups only care about reusable output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CompletedStep {
     input_hash: String,
@@ -28,6 +30,10 @@ impl Diary {
         let file = File::open(path)?;
         let mut diary = Self::default();
 
+        // Rebuild the latest usable state by replaying the append-only diary.
+        // Keeping the first complete result makes a step idempotent: once a
+        // step has succeeded for an input, later accidental writes do not
+        // silently change the answer callers get back.
         for line in BufReader::new(file).lines() {
             let line = line?;
             let Some(event) = DiaryEvent::parse(&line) else {
@@ -58,6 +64,8 @@ impl Diary {
     }
 }
 
+// One physical line in the diary file. This gives the file enough information
+// to explain what happened without needing a database yet.
 #[derive(Debug, PartialEq, Eq)]
 enum DiaryEvent {
     Started {
@@ -161,6 +169,8 @@ fn run_step(args: &[String]) -> Result<(), String> {
     let input_hash = hash_input(input);
 
     let diary = Diary::load(&diary_path).map_err(|error| error.to_string())?;
+    // Fast path: same step id + same input hash means the wrapped command has
+    // already produced a reusable stdout value, so do not spend the work again.
     if let Some(output) = diary.result_for(step_id, &input_hash) {
         print!("{output}");
         return Ok(());
@@ -229,6 +239,8 @@ fn append_event(path: &Path, event: &DiaryEvent) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
 
+    // Append-only writes are simple and crash-friendly: a partially completed
+    // run can leave history behind without corrupting older successful output.
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -269,6 +281,8 @@ fn format_event(event: &DiaryEvent) -> String {
 fn hash_input(input: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
 
+    // Stable FNV-1a hash. It is not a security boundary; it is just a compact,
+    // repeatable fingerprint so cache hits keep working across process restarts.
     for byte in input.as_bytes() {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x100000001b3);
@@ -285,6 +299,8 @@ fn unix_timestamp() -> u64 {
 }
 
 fn encode_field(value: &str) -> String {
+    // The diary is tab-separated, so escape separators and newlines before
+    // writing command output into a single durable record.
     value
         .replace('%', "%25")
         .replace('\t', "%09")
