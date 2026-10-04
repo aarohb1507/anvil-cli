@@ -45,6 +45,21 @@ anvil run [--diary PATH] <step-id> <input> -- <command> [args...]
 anvil status [PATH]
 ```
 
+## Testing
+
+The end-to-end test launches the built `anvil` binary twice against a temporary
+diary. It verifies that the first call runs the wrapped shell command, the
+second returns cached stdout, and `status` reports the completed step.
+
+```sh
+cargo test --test durable_runner_e2e -- --nocapture
+```
+
+With `--nocapture`, the test prints two lightweight timing metrics:
+`fresh_run_ms` and `cache_hit_ms`. They include CLI process startup and diary
+I/O, making them useful as a small regression signal rather than a synthetic
+microbenchmark.
+
 ## Current Storage Format
 
 The diary is a tab-separated append-only file. That keeps the first useful
